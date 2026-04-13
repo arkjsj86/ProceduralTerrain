@@ -172,10 +172,13 @@ public class DirtSystem : MonoBehaviour
         var emission = pilePS.emission;
         emission.enabled = false;
 
-        var renderer = pilePS.GetComponent<ParticleSystemRenderer>();
-        renderer.renderMode = ParticleSystemRenderMode.Stretch; // 작은 덩어리감
+        var psRenderer = pilePS.GetComponent<ParticleSystemRenderer>();
+        // Stretch는 속도가 있어야 크기가 생김 → Billboard로 변경
+        psRenderer.renderMode = ParticleSystemRenderMode.Billboard;
+        psRenderer.material   = CreateDirtMaterial();
 
-        pilePS.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        // Stop()을 부르면 SetParticles()로 추가한 파티클도 렌더링 안 됨 → Play로 대기
+        pilePS.Play();
     }
 
     private void SetupOverflowParticleSystem()
@@ -199,10 +202,22 @@ public class DirtSystem : MonoBehaviour
         var emission = overflowPS.emission;
         emission.enabled = false;
 
-        var renderer = overflowPS.GetComponent<ParticleSystemRenderer>();
-        renderer.renderMode = ParticleSystemRenderMode.Stretch;
+        var psRenderer = overflowPS.GetComponent<ParticleSystemRenderer>();
+        psRenderer.renderMode = ParticleSystemRenderMode.Billboard;
+        psRenderer.material   = CreateDirtMaterial();
 
         overflowPS.Play(); // 재생 상태여야 Emit() 동작
+    }
+
+    // URP 파티클 전용 셰이더로 재질 생성 (없으면 레거시 폴백)
+    private Material CreateDirtMaterial()
+    {
+        var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (shader == null)
+            shader = Shader.Find("Particles/Standard Unlit");
+        var mat = new Material(shader);
+        mat.SetColor("_BaseColor", dirtColor);
+        return mat;
     }
 
     private void OnDestroy()
