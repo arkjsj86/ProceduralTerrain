@@ -27,8 +27,10 @@ public class DirtSystem : MonoBehaviour
     private ParticleSystem overflowPS;
     private Transform cubeTransform;
 
-    // 파티클 위치/크기/색상을 count 변경 시에만 재계산하여 매 프레임 지터 방지
+    // 로컬 좌표 기준 파티클 캐시 (TransformPoint 적용 전)
     private ParticleSystem.Particle[] cachedParticles;
+    // SetParticles용 월드 좌표 작업 버퍼 (매 프레임 재사용)
+    private ParticleSystem.Particle[] workParticles;
     private int cachedCount = -1;
 
     // ── 초기화 ────────────────────────────────────────────────────
@@ -82,15 +84,19 @@ public class DirtSystem : MonoBehaviour
             return;
         }
 
-        // cubeTransform.TransformPoint으로 큐브 로컬 → 월드 좌표 변환
-        // → 큐브가 이동/회전해도 파티클이 항상 큐브 상단에 붙어있음
+        // 작업 버퍼 준비 (크기 부족 시에만 재할당)
+        if (workParticles == null || workParticles.Length < targetCount)
+            workParticles = new ParticleSystem.Particle[targetCount];
+
+        // cachedParticles(로컬 좌표)를 workParticles(월드 좌표)로 복사
+        // → cachedParticles 원본은 변경하지 않으므로 매 프레임 안전하게 재사용 가능
         for (int i = 0; i < targetCount; i++)
         {
-            cachedParticles[i].position =
-                cubeTransform.TransformPoint(cachedParticles[i].position);
+            workParticles[i]          = cachedParticles[i];
+            workParticles[i].position = cubeTransform.TransformPoint(cachedParticles[i].position);
         }
 
-        pilePS.SetParticles(cachedParticles, targetCount);
+        pilePS.SetParticles(workParticles, targetCount);
     }
 
     // 큐브 로컬 공간 기준으로 파티클 위치/외형 사전 계산
