@@ -1,6 +1,5 @@
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 public static class TerrainGeneratorEditor
 {
@@ -12,11 +11,10 @@ public static class TerrainGeneratorEditor
         go.AddComponent<MeshFilter>();
 
         MeshRenderer renderer = go.AddComponent<MeshRenderer>();
-        renderer.sharedMaterial = GetDefaultMaterial();
+        renderer.sharedMaterial = GetOrCreateDefaultMaterial();
 
         go.AddComponent<TerrainGenerator>();
 
-        // Undo 등록: Ctrl+Z로 생성 취소 가능
         Undo.RegisterCreatedObjectUndo(go, "Create ProceduralTerrain");
 
         Selection.activeGameObject = go;
@@ -26,22 +24,51 @@ public static class TerrainGeneratorEditor
     [MenuItem("Tools/ProceduralTerrain/Create Terrain", validate = true)]
     private static bool ValidateCreateTerrain()
     {
-        // 씬에 이미 ProceduralTerrain이 존재하면 메뉴 비활성화
         return Object.FindFirstObjectByType<TerrainGenerator>() == null;
     }
 
-    private static Material GetDefaultMaterial()
+    // Assets/Materials/TerrainDefault.mat 를 찾거나 없으면 새로 생성
+    private static Material GetOrCreateDefaultMaterial()
     {
-        // URP 기본 Lit 머티리얼을 찾아 반환, 없으면 null(마젠타 표시)
-        string[] guids = AssetDatabase.FindAssets("t:Material", new[] { "Assets" });
-        foreach (string guid in guids)
+        const string matPath = "Assets/Materials/TerrainDefault.mat";
+
+        Material existing = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+        if (existing != null) return existing;
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null)
         {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            Material mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (mat != null && mat.shader.name.Contains("Lit"))
-                return mat;
+            Debug.LogWarning("[ProceduralTerrain] URP Lit 셰이더를 찾을 수 없습니다. 머티리얼을 직접 할당해 주세요.");
+            return null;
         }
 
-        return null;
+        if (!AssetDatabase.IsValidFolder("Assets/Materials"))
+            AssetDatabase.CreateFolder("Assets", "Materials");
+
+        Material mat = new Material(shader) { name = "TerrainDefault" };
+        AssetDatabase.CreateAsset(mat, matPath);
+        AssetDatabase.SaveAssets();
+
+        Debug.Log("[ProceduralTerrain] TerrainDefault.mat 생성 완료: " + matPath);
+        return mat;
+    }
+}
+
+[CustomEditor(typeof(TerrainGenerator))]
+public class TerrainGeneratorInspector : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        DrawDefaultInspector();
+
+        EditorGUILayout.Space(8);
+
+        if (GUILayout.Button("Preview", GUILayout.Height(30)))
+        {
+            TerrainGenerator generator = (TerrainGenerator)target;
+            generator.GenerateTerrain();
+            EditorUtility.SetDirty(generator);
+            SceneView.RepaintAll();
+        }
     }
 }
