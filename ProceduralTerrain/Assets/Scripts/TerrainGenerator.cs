@@ -3,7 +3,7 @@ using UnityEngine.Rendering;
 
 // TerrainDeformer보다 먼저 Start()가 실행되어야 HeightMap이 준비됨
 [DefaultExecutionOrder(-1)]
-[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
+[RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider))]
 public class TerrainGenerator : MonoBehaviour
 {
     [SerializeField] private int width = 128;
@@ -153,6 +153,8 @@ public class TerrainGenerator : MonoBehaviour
         mesh.triangles = triangles;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
+
+        GetComponent<MeshCollider>().sharedMesh = mesh;
     }
 
     // HeightMap 수정 후 Mesh를 다시 그릴 때 호출 (런타임 침식에서 사용)
@@ -167,5 +169,7 @@ public class TerrainGenerator : MonoBehaviour
         mesh.vertices = vertices;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
+
+        GetComponent<MeshCollider>().sharedMesh = mesh;
     }
 }
