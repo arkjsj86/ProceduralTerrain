@@ -135,7 +135,6 @@ public class TerrainCursor : MonoBehaviour
         yield return MoveCoroutine(cursorCube.transform, downPos, startPos, 0.2f);
 
         // 완료: 지형 파기 + 흙 누적
-        Debug.Log($"[DigCoroutine] Deform 호출 — pos={lastHitPoint}, radius={BrushRadius}, strength={strength}");
         deformer.Deform(lastHitPoint, BrushRadius, strength, false);
         dirtSystem.AddDirt(dirtPerDig);
 

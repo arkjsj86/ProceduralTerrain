@@ -52,7 +52,6 @@ public class TerrainDeformer : MonoBehaviour
     /// <param name="raise">true = 올리기, false = 파기</param>
     public void Deform(Vector3 worldPos, float radius, float strength, bool raise)
     {
-        Debug.Log($"[TerrainDeformer] Deform 진입 — buffer={(heightBuffer != null ? "OK" : "NULL")}, shader={(deformShader != null ? "OK" : "NULL")}");
         if (heightBuffer == null)
         {
             Debug.LogWarning("[TerrainDeformer] 버퍼가 초기화되지 않았습니다. InitBuffer()를 먼저 호출하세요.");
@@ -81,7 +80,6 @@ public class TerrainDeformer : MonoBehaviour
 
         // GPU → CPU HeightMap 동기화 후 Mesh 반영
         heightBuffer.GetData(generator.HeightMap);
-        Debug.Log($"[TerrainDeformer] Dispatch 완료 — centerX={centerX:F1}, centerZ={centerZ:F1}, radius={radius}, strength={strength}, dir={( raise ? "+1" : "-1")}");
         generator.ApplyHeightMap();
     }
 
