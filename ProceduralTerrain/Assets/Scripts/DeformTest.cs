@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// TerrainDeformer 동작 확인용 임시 테스트 스크립트
@@ -20,11 +21,11 @@ public class DeformTest : MonoBehaviour
         if (deformer == null) return;
 
         // 좌클릭 홀드 = 파기
-        if (Input.GetMouseButton(0))
+        if (Mouse.current.leftButton.isPressed)
             deformer.Deform(transform.position, radius, strength, false);
 
         // 우클릭 홀드 = 올리기
-        if (Input.GetMouseButton(1))
+        if (Mouse.current.rightButton.isPressed)
             deformer.Deform(transform.position, radius, strength, true);
     }
 
