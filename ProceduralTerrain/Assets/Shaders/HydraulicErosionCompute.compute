@@ -1,0 +1,170 @@
+#pragma kernel CSErosion
+
+// float를 int로 변환할 때 사용하는 스케일 (소수점 5자리 보존)
+// InterlockedAdd는 int만 지원하므로 float heightMap을 int로 변환
+static const int HEIGHT_SCALE = 100000;
+
+// 지형 높이맵: int로 저장하여 원자 연산(InterlockedAdd) 적용 가능
+RWStructuredBuffer<int>    _HeightMap;
+
+// 물방울별 시작 위치 (x, z)
+StructuredBuffer<float2>   _RandomSeeds;
+
+// 브러시: 중심 기준 오프셋(dx, dz)과 정규화된 가중치
+StructuredBuffer<int2>     _BrushOffsets;
+StructuredBuffer<float>    _BrushWeights;
+
+int   _Width;
+int   _Depth;
+int   _NumDroplets;
+int   _MaxLifetime;
+int   _BrushCount;
+
+float _Inertia;
+float _SedimentCapacityFactor;
+float _MinSedimentCapacity;
+float _DepositSpeed;
+float _ErodeSpeed;
+float _EvaporateSpeed;
+float _Gravity;
+float _StartSpeed;
+float _StartWater;
+
+// ───────────────────────────────────────────────────────────────
+// 이중선형 보간으로 float 좌표의 높이와 경사 계산
+// ───────────────────────────────────────────────────────────────
+void GetHeightAndGradient(
+    float posX, float posZ,
+    out float height, out float gradX, out float gradZ)
+{
+    int x = (int)posX;
+    int z = (int)posZ;
+    float u = posX - x;
+    float v = posZ - z;
+
+    int stride = _Width + 1;
+    float h00 = _HeightMap[z       * stride + x    ] / (float)HEIGHT_SCALE;
+    float h10 = _HeightMap[z       * stride + x + 1] / (float)HEIGHT_SCALE;
+    float h01 = _HeightMap[(z + 1) * stride + x    ] / (float)HEIGHT_SCALE;
+    float h11 = _HeightMap[(z + 1) * stride + x + 1] / (float)HEIGHT_SCALE;
+
+    gradX  = (h10 - h00) * (1 - v) + (h11 - h01) * v;
+    gradZ  = (h01 - h00) * (1 - u) + (h11 - h10) * u;
+    height = h00 * (1 - u) * (1 - v)
+           + h10 * u       * (1 - v)
+           + h01 * (1 - u) * v
+           + h11 * u       * v;
+}
+
+// ───────────────────────────────────────────────────────────────
+// float 좌표 4개 인접 격자에 이중선형으로 토사 퇴적
+// ───────────────────────────────────────────────────────────────
+void DepositSediment(float posX, float posZ, float amount)
+{
+    int x = (int)posX;
+    int z = (int)posZ;
+    if (x < 0 || x >= _Width || z < 0 || z >= _Depth) return;
+
+    float u = posX - x;
+    float v = posZ - z;
+    int stride = _Width + 1;
+
+    InterlockedAdd(_HeightMap[z       * stride + x    ], (int)(amount * (1 - u) * (1 - v) * HEIGHT_SCALE));
+    InterlockedAdd(_HeightMap[z       * stride + x + 1], (int)(amount * u       * (1 - v) * HEIGHT_SCALE));
+    InterlockedAdd(_HeightMap[(z + 1) * stride + x    ], (int)(amount * (1 - u) * v       * HEIGHT_SCALE));
+    InterlockedAdd(_HeightMap[(z + 1) * stride + x + 1], (int)(amount * u       * v       * HEIGHT_SCALE));
+}
+
+// ───────────────────────────────────────────────────────────────
+// 브러시 가중치에 따라 반경 내 격자에 침식량 분산
+// ───────────────────────────────────────────────────────────────
+void ErodeTerrain(int nodeX, int nodeZ, float amount)
+{
+    for (int i = 0; i < _BrushCount; i++)
+    {
+        int bx = nodeX + _BrushOffsets[i].x;
+        int bz = nodeZ + _BrushOffsets[i].y;
+        if (bx < 0 || bx > _Width || bz < 0 || bz > _Depth) continue;
+
+        InterlockedAdd(_HeightMap[bz * (_Width + 1) + bx],
+            -(int)(_BrushWeights[i] * amount * HEIGHT_SCALE));
+    }
+}
+
+// ───────────────────────────────────────────────────────────────
+// 메인 커널: 스레드 1개 = 물방울 1개
+// Dispatch(ceil(numDroplets/64), 1, 1) 로 호출
+// ───────────────────────────────────────────────────────────────
+[numthreads(64, 1, 1)]
+void CSErosion(uint3 id : SV_DispatchThreadID)
+{
+    // 올림 Dispatch로 생긴 여분 스레드 제거
+    if ((int)id.x >= _NumDroplets) return;
+
+    float posX     = _RandomSeeds[id.x].x;
+    float posZ     = _RandomSeeds[id.x].y;
+    float dirX     = 0;
+    float dirZ     = 0;
+    float speed    = _StartSpeed;
+    float water    = _StartWater;
+    float sediment = 0;
+
+    for (int lifetime = 0; lifetime < _MaxLifetime; lifetime++)
+    {
+        int nodeX = (int)posX;
+        int nodeZ = (int)posZ;
+
+        if (nodeX < 0 || nodeX >= _Width || nodeZ < 0 || nodeZ >= _Depth) break;
+
+        float height, gradX, gradZ;
+        GetHeightAndGradient(posX, posZ, height, gradX, gradZ);
+
+        // 관성 반영 방향 갱신
+        dirX = dirX * _Inertia - gradX * (1 - _Inertia);
+        dirZ = dirZ * _Inertia - gradZ * (1 - _Inertia);
+
+        float len = sqrt(dirX * dirX + dirZ * dirZ);
+        if (len == 0) break;
+        dirX /= len;
+        dirZ /= len;
+
+        float oldPosX = posX;
+        float oldPosZ = posZ;
+        posX += dirX;
+        posZ += dirZ;
+
+        if (posX < 0 || posX >= _Width || posZ < 0 || posZ >= _Depth) break;
+
+        float newHeight, ng1, ng2;
+        GetHeightAndGradient(posX, posZ, newHeight, ng1, ng2);
+
+        float deltaHeight = newHeight - height;
+        float capacity    = max(-deltaHeight, _MinSedimentCapacity)
+                            * speed * water * _SedimentCapacityFactor;
+
+        if (sediment > capacity || deltaHeight > 0)
+        {
+            float depositAmount = deltaHeight > 0
+                ? min(deltaHeight, sediment)
+                : (sediment - capacity) * _DepositSpeed;
+
+            sediment -= depositAmount;
+            DepositSediment(oldPosX, oldPosZ, depositAmount);
+        }
+        else
+        {
+            float erodeAmount = min((capacity - sediment) * _ErodeSpeed, -deltaHeight);
+            sediment += erodeAmount;
+            ErodeTerrain(nodeX, nodeZ, erodeAmount);
+        }
+
+        // 내리막(-deltaHeight > 0) 가속, 오르막 감속
+        speed  = sqrt(max(speed * speed - deltaHeight * _Gravity, 0));
+        water *= (1 - _EvaporateSpeed);
+        if (water < 0.001f) break;
+    }
+
+    // 수명 종료 시 잔여 토사 전량 퇴적
+    if (sediment > 0)
+        DepositSediment(posX, posZ, sediment);
+}
