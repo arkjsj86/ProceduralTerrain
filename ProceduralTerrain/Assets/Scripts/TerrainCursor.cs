@@ -9,8 +9,8 @@ public class TerrainCursor : MonoBehaviour
     // 큐브 크기 (XZ = 브러시 영역, Y = 시각적 높이)
     [SerializeField] private Vector3 cursorScale = new Vector3(4f, 2f, 4f);
 
-    [Range(0.01f, 0.5f)]
-    [SerializeField] private float strength = 0.05f;
+    [Range(0.01f, 3f)]
+    [SerializeField] private float strength = 0.5f;
 
     [Header("Dig")]
     // 하강 깊이 (cursorScale.y 대비 배율)
