@@ -100,11 +100,33 @@ public class TerrainCursor : MonoBehaviour
             StartCoroutine(DumpCoroutine());
     }
 
-    // 굴삭 코루틴 (Commit 3에서 구현)
+    // ── 굴삭 코루틴: 하강 → X축 90° 회전 → 상승 → 지형 변형 ─────────
     private System.Collections.IEnumerator DigCoroutine()
     {
         IsAnimating = true;
-        yield return null; // placeholder
+
+        Vector3 startPos    = cursorCube.transform.position;
+        Quaternion startRot = cursorCube.transform.rotation;
+
+        // 1단계: 하강 (cursorScale.y 절반만큼 땅속으로)
+        float dropDepth = cursorScale.y * 0.5f;
+        Vector3 downPos = startPos + Vector3.down * dropDepth;
+        yield return MoveCoroutine(cursorCube.transform, startPos, downPos, 0.2f);
+
+        // 2단계: 월드 X축 기준 90° 회전 (버킷이 흙을 퍼올리는 동작)
+        Quaternion endRot = Quaternion.AngleAxis(90f, Vector3.right) * startRot;
+        yield return RotateCoroutine(cursorCube.transform, startRot, endRot, 0.4f);
+
+        // 3단계: 상승 (원래 위치로 복귀)
+        yield return MoveCoroutine(cursorCube.transform, downPos, startPos, 0.2f);
+
+        // 완료: 지형 파기 + 흙 누적
+        deformer.Deform(lastHitPoint, BrushRadius, strength, false);
+        dirtSystem.AddDirt(strength);
+
+        // 큐브 회전을 원점으로 복귀
+        cursorCube.transform.rotation = startRot;
+
         IsAnimating = false;
     }
 
@@ -114,6 +136,34 @@ public class TerrainCursor : MonoBehaviour
         IsAnimating = true;
         yield return null; // placeholder
         IsAnimating = false;
+    }
+
+    // ── 보조 코루틴: 위치 보간 ──────────────────────────────────────
+    private System.Collections.IEnumerator MoveCoroutine(
+        Transform t, Vector3 from, Vector3 to, float duration)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            t.position = Vector3.Lerp(from, to, elapsed / duration);
+            yield return null;
+        }
+        t.position = to;
+    }
+
+    // ── 보조 코루틴: 회전 보간 ──────────────────────────────────────
+    private System.Collections.IEnumerator RotateCoroutine(
+        Transform t, Quaternion from, Quaternion to, float duration)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            t.rotation = Quaternion.Slerp(from, to, elapsed / duration);
+            yield return null;
+        }
+        t.rotation = to;
     }
 
     private float BrushRadius => Mathf.Max(cursorScale.x, cursorScale.z) * 0.5f;
