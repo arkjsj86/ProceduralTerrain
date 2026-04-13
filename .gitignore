@@ -1,0 +1,10 @@
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Builds]/
+/[Ll]ogs/
+/[Uu]serSettings/
+*.csproj
+*.sln
+*.unitypackage
