@@ -9,10 +9,15 @@ public class TerrainDeformer : MonoBehaviour
     private ComputeBuffer heightBuffer;
     private int kernelIndex;
 
-    private void Start()
+    // Awake는 모든 Start() 이전에 실행되므로
+    // TerrainGenerator.Start() → InitBuffer() 호출 시점에 generator가 준비됨
+    private void Awake()
     {
         generator = GetComponent<TerrainGenerator>();
+    }
 
+    private void Start()
+    {
         if (generator.HeightMap == null)
         {
             Debug.LogWarning("[TerrainDeformer] HeightMap이 아직 생성되지 않았습니다. TerrainGenerator의 실행 순서를 확인하세요.");
