@@ -13,6 +13,7 @@ public class TerrainCursor : MonoBehaviour
     [SerializeField] private float strength = 0.05f;
 
     private GameObject cursorCube;
+    private DirtSystem dirtSystem;
     private Vector3 lastHitPoint;
     private bool isHitting;
 
@@ -22,6 +23,10 @@ public class TerrainCursor : MonoBehaviour
             mainCamera = Camera.main;
 
         CreateCursorCube();
+
+        // DirtSystem을 큐브 오브젝트에 부착 → 파티클이 큐브 기준 좌표로 쌓임
+        dirtSystem = cursorCube.AddComponent<DirtSystem>();
+        dirtSystem.Initialize(cursorCube.transform, cursorScale);
     }
 
     private void CreateCursorCube()
@@ -34,7 +39,25 @@ public class TerrainCursor : MonoBehaviour
         // Raycast에 방해되지 않도록 콜라이더 제거
         Destroy(cursorCube.GetComponent<Collider>());
 
+        // 반투명 재질 적용 (브러시 영역을 시각적으로 표시)
+        cursorCube.GetComponent<MeshRenderer>().material = CreateTransparentMaterial();
+
         cursorCube.SetActive(false);
+    }
+
+    private Material CreateTransparentMaterial()
+    {
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        // URP Lit 투명 모드 설정
+        mat.SetFloat("_Surface", 1f);              // 0=Opaque, 1=Transparent
+        mat.SetFloat("_Blend", 0f);                // Alpha blending
+        mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetFloat("_ZWrite", 0f);
+        mat.SetColor("_BaseColor", new Color(0.4f, 0.7f, 1f, 0.25f));
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        return mat;
     }
 
     private void Update()
@@ -71,7 +94,10 @@ public class TerrainCursor : MonoBehaviour
 
         // 좌클릭 홀드 = 파기, 우클릭 홀드 = 올리기
         if (Mouse.current.leftButton.isPressed)
+        {
             deformer.Deform(lastHitPoint, radius, strength, false);
+            dirtSystem?.AddDirt(strength);
+        }
 
         if (Mouse.current.rightButton.isPressed)
             deformer.Deform(lastHitPoint, radius, strength, true);
