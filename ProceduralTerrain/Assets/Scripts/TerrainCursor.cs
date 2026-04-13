@@ -17,6 +17,9 @@ public class TerrainCursor : MonoBehaviour
     private Vector3 lastHitPoint;
     private bool isHitting;
 
+    // 애니메이션 진행 중 커서 추적·입력 차단
+    public bool IsAnimating { get; private set; }
+
     private void Awake()
     {
         if (mainCamera == null)
@@ -24,7 +27,6 @@ public class TerrainCursor : MonoBehaviour
 
         CreateCursorCube();
 
-        // DirtSystem을 큐브 오브젝트에 부착 → 파티클이 큐브 기준 좌표로 쌓임
         dirtSystem = cursorCube.AddComponent<DirtSystem>();
         dirtSystem.Initialize(cursorCube.transform, cursorScale);
     }
@@ -36,10 +38,8 @@ public class TerrainCursor : MonoBehaviour
         cursorCube.transform.SetParent(transform);
         cursorCube.transform.localScale = cursorScale;
 
-        // Raycast에 방해되지 않도록 콜라이더 제거
         Destroy(cursorCube.GetComponent<Collider>());
 
-        // 반투명 재질 적용 (브러시 영역을 시각적으로 표시)
         cursorCube.GetComponent<MeshRenderer>().material = CreateTransparentMaterial();
 
         cursorCube.SetActive(false);
@@ -48,9 +48,8 @@ public class TerrainCursor : MonoBehaviour
     private Material CreateTransparentMaterial()
     {
         var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        // URP Lit 투명 모드 설정
-        mat.SetFloat("_Surface", 1f);              // 0=Opaque, 1=Transparent
-        mat.SetFloat("_Blend", 0f);                // Alpha blending
+        mat.SetFloat("_Surface", 1f);
+        mat.SetFloat("_Blend", 0f);
         mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
         mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         mat.SetFloat("_ZWrite", 0f);
@@ -62,6 +61,9 @@ public class TerrainCursor : MonoBehaviour
 
     private void Update()
     {
+        // 애니메이션 중에는 커서 추적·입력 모두 차단
+        if (IsAnimating) return;
+
         cursorCube.transform.localScale = cursorScale;
         UpdateCursorPosition();
         HandleInput();
@@ -90,22 +92,34 @@ public class TerrainCursor : MonoBehaviour
     {
         if (!isHitting || deformer == null) return;
 
-        float radius = BrushRadius;
+        // 단일 클릭 감지 (홀드 아님)
+        if (Mouse.current.leftButton.wasPressedThisFrame)
+            StartCoroutine(DigCoroutine());
 
-        // 좌클릭 홀드 = 파기, 우클릭 홀드 = 올리기
-        if (Mouse.current.leftButton.isPressed)
-        {
-            deformer.Deform(lastHitPoint, radius, strength, false);
-            dirtSystem?.AddDirt(strength);
-        }
-
-        if (Mouse.current.rightButton.isPressed)
-            deformer.Deform(lastHitPoint, radius, strength, true);
+        if (Mouse.current.rightButton.wasPressedThisFrame)
+            StartCoroutine(DumpCoroutine());
     }
 
-    // XZ 중 큰 쪽의 절반을 반경으로 사용
-    // Inspector에서 cursorScale을 바꾸면 브러시 영역이 즉시 반영됨
+    // 굴삭 코루틴 (Commit 3에서 구현)
+    private System.Collections.IEnumerator DigCoroutine()
+    {
+        IsAnimating = true;
+        yield return null; // placeholder
+        IsAnimating = false;
+    }
+
+    // 덤프 코루틴 (Commit 4에서 구현)
+    private System.Collections.IEnumerator DumpCoroutine()
+    {
+        IsAnimating = true;
+        yield return null; // placeholder
+        IsAnimating = false;
+    }
+
     private float BrushRadius => Mathf.Max(cursorScale.x, cursorScale.z) * 0.5f;
 
     public Vector3 CursorScale => cursorScale;
+
+    // 코루틴에서 IsAnimating 해제에 사용
+    protected void SetAnimating(bool value) => IsAnimating = value;
 }
