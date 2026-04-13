@@ -8,6 +8,3 @@
 *.csproj
 *.sln
 *.unitypackage
-
-# Claude Code 로컬 설정 (개인용, git 제외)
-.claude/settings.local.json
