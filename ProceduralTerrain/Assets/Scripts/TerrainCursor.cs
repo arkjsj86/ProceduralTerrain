@@ -12,6 +12,15 @@ public class TerrainCursor : MonoBehaviour
     [Range(0.01f, 0.5f)]
     [SerializeField] private float strength = 0.05f;
 
+    [Header("Dig")]
+    // 하강 깊이 (cursorScale.y 대비 배율)
+    [Range(0.5f, 3f)]
+    [SerializeField] private float digDepthMultiplier = 1.5f;
+
+    // 한 번 팔 때 쌓이는 흙의 양
+    [Range(0.1f, 10f)]
+    [SerializeField] private float dirtPerDig = 2f;
+
     private GameObject cursorCube;
     private DirtSystem dirtSystem;
     private Vector3 lastHitPoint;
@@ -110,7 +119,7 @@ public class TerrainCursor : MonoBehaviour
         Quaternion startRot    = cursorCube.transform.rotation;
         Quaternion uprightRot  = Quaternion.AngleAxis(90f, Vector3.right) * startRot;
 
-        float   dropDepth = cursorScale.y * 0.5f;
+        float   dropDepth = cursorScale.y * digDepthMultiplier;
         Vector3 downPos   = startPos + Vector3.down * dropDepth;
 
         // 1단계: 수직으로 세우기 (--- → |)
@@ -127,7 +136,7 @@ public class TerrainCursor : MonoBehaviour
 
         // 완료: 지형 파기 + 흙 누적
         deformer.Deform(lastHitPoint, BrushRadius, strength, false);
-        dirtSystem.AddDirt(strength);
+        dirtSystem.AddDirt(dirtPerDig);
 
         IsAnimating = false;
     }
