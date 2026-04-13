@@ -39,6 +39,7 @@ public class TerrainCursor : MonoBehaviour
 
     private void Update()
     {
+        cursorCube.transform.localScale = cursorScale;
         UpdateCursorPosition();
         HandleInput();
     }
@@ -66,13 +67,19 @@ public class TerrainCursor : MonoBehaviour
     {
         if (!isHitting || deformer == null) return;
 
+        float radius = BrushRadius;
+
         // 좌클릭 홀드 = 파기, 우클릭 홀드 = 올리기
         if (Mouse.current.leftButton.isPressed)
-            deformer.Deform(lastHitPoint, cursorScale.x * 0.5f, strength, false);
+            deformer.Deform(lastHitPoint, radius, strength, false);
 
         if (Mouse.current.rightButton.isPressed)
-            deformer.Deform(lastHitPoint, cursorScale.x * 0.5f, strength, true);
+            deformer.Deform(lastHitPoint, radius, strength, true);
     }
+
+    // XZ 중 큰 쪽의 절반을 반경으로 사용
+    // Inspector에서 cursorScale을 바꾸면 브러시 영역이 즉시 반영됨
+    private float BrushRadius => Mathf.Max(cursorScale.x, cursorScale.z) * 0.5f;
 
     public Vector3 CursorScale => cursorScale;
 }
