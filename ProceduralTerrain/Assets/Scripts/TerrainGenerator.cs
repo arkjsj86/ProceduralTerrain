@@ -12,6 +12,9 @@ public class TerrainGenerator : MonoBehaviour
 
     [SerializeField] public NoiseSettings noiseSettings = new NoiseSettings();
 
+    [SerializeField] public bool applyErosion = true;
+    [SerializeField] public ErosionSettings erosionSettings = new ErosionSettings();
+
     // 침식 알고리즘(2단계)과 Compute Shader(3단계)에서 직접 접근
     public float[] HeightMap { get; private set; }
 
@@ -29,6 +32,8 @@ public class TerrainGenerator : MonoBehaviour
     {
         HeightMap = new float[(width + 1) * (depth + 1)];
         GenerateHeightMap();
+        if (applyErosion)
+            HydraulicErosion.Erode(HeightMap, width, depth, erosionSettings);
         BuildMesh();
     }
 
