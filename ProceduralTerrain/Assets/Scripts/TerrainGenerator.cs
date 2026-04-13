@@ -21,8 +21,9 @@ public class TerrainGenerator : MonoBehaviour
     // 침식 알고리즘(2단계)과 Compute Shader(3단계)에서 직접 접근
     public float[] HeightMap { get; private set; }
 
-    public int Width => width;
-    public int Depth => depth;
+    public int Width    => width;
+    public int Depth    => depth;
+    public float CellSize => cellSize;
 
     private Mesh mesh;
 
