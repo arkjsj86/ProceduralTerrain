@@ -156,9 +156,9 @@ public class TerrainCursor : MonoBehaviour
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
 
-            // Y축 기준 0° → 360° 회전
+            // X축 기준 0° → 360° 회전 (버킷이 앞으로 한 바퀴 — 굴삭과 동일 축)
             cursorCube.transform.rotation =
-                Quaternion.AngleAxis(360f * t, Vector3.up) * startRot;
+                Quaternion.AngleAxis(360f * t, Vector3.right) * startRot;
 
             // 180° 도달 시 흙 방출 (뒤집히는 시점)
             if (!dumped && t >= 0.5f)
