@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
+// TerrainDeformer보다 먼저 Start()가 실행되어야 HeightMap이 준비됨
+[DefaultExecutionOrder(-1)]
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class TerrainGenerator : MonoBehaviour
 {
@@ -39,6 +41,9 @@ public class TerrainGenerator : MonoBehaviour
         if (applyErosion)
             RunErosion();
         BuildMesh();
+
+        // 지형 생성 완료 후 Deformer GPU 버퍼 초기화
+        GetComponent<TerrainDeformer>()?.InitBuffer();
     }
 
     private void RunErosion()
