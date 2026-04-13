@@ -28,7 +28,46 @@ public class TerrainGenerator : MonoBehaviour
     public void GenerateTerrain()
     {
         HeightMap = new float[(width + 1) * (depth + 1)];
+        GenerateHeightMap();
         BuildMesh();
+    }
+
+    private void GenerateHeightMap()
+    {
+        // 시드 기반 옥타브별 랜덤 오프셋 생성
+        System.Random rng = new System.Random(noiseSettings.seed);
+        Vector2[] octaveOffsets = new Vector2[noiseSettings.octaves];
+        for (int o = 0; o < noiseSettings.octaves; o++)
+        {
+            float ox = (float)(rng.NextDouble() * 200000 - 100000) + noiseSettings.offset.x;
+            float oz = (float)(rng.NextDouble() * 200000 - 100000) + noiseSettings.offset.y;
+            octaveOffsets[o] = new Vector2(ox, oz);
+        }
+
+        for (int z = 0; z <= depth; z++)
+        {
+            for (int x = 0; x <= width; x++)
+            {
+                float noiseHeight = 0f;
+                float currentAmplitude = noiseSettings.amplitude;
+                float currentFrequency = noiseSettings.frequency;
+
+                for (int o = 0; o < noiseSettings.octaves; o++)
+                {
+                    float sampleX = (x / (float)width) * currentFrequency + octaveOffsets[o].x;
+                    float sampleZ = (z / (float)depth) * currentFrequency + octaveOffsets[o].y;
+
+                    // [0,1] → [-1,1] 리맵: 봉우리와 계곡이 모두 나타남
+                    float perlin = Mathf.PerlinNoise(sampleX, sampleZ) * 2f - 1f;
+                    noiseHeight += perlin * currentAmplitude;
+
+                    currentAmplitude *= noiseSettings.persistence;
+                    currentFrequency *= noiseSettings.lacunarity;
+                }
+
+                HeightMap[z * (width + 1) + x] = noiseHeight;
+            }
+        }
     }
 
     private void BuildMesh()
