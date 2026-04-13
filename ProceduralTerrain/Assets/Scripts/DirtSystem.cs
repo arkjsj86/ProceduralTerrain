@@ -123,6 +123,19 @@ public class DirtSystem : MonoBehaviour
         return particles;
     }
 
+    // ── 전량 덤프: 우클릭 회전 시 쌓인 흙 전부 방출 ─────────────────
+    public void DumpAll()
+    {
+        if (AccumulatedDirt <= 0f) return;
+
+        EmitOverflow(AccumulatedDirt);
+
+        // 상태 초기화 → LateUpdate에서 targetCount=0이 되어 더미 파티클 즉시 소거
+        AccumulatedDirt = 0f;
+        cachedCount     = -1;
+        pilePS.Clear();
+    }
+
     // ── 오버플로우: 큐브 위에서 랜덤 방향으로 튀어나가는 낙하 파티클 ──
     private void EmitOverflow(float excessAmount)
     {
