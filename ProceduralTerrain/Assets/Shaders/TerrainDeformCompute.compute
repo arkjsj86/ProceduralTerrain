@@ -1,0 +1,49 @@
+#pragma kernel CSDeform
+
+// 침식 셰이더와 달리 스레드 1개 = 셀 1개 (유일한 쓰기 대상)
+// → 경쟁 조건 없음 → float 직접 읽기/쓰기 가능 (InterlockedAdd 불필요)
+RWStructuredBuffer<float> _HeightMap;
+
+int   _Width;
+int   _Depth;
+
+// 변형 중심 (HeightMap 셀 좌표계, cellSize로 나눈 값)
+float _CenterX;
+float _CenterZ;
+
+// 브러시 반경 (셀 단위)
+float _Radius;
+
+// 변형 강도 (프레임당 높이 변화량)
+float _Strength;
+
+// +1 = 올리기 (우클릭), -1 = 파기 (좌클릭)
+float _Direction;
+
+// ───────────────────────────────────────────────────────────────
+// 메인 커널: 영향 범위를 8×8 스레드 그룹으로 분할
+// Dispatch(ceil(diameter/8), ceil(diameter/8), 1) 로 호출
+// ───────────────────────────────────────────────────────────────
+[numthreads(8, 8, 1)]
+void CSDeform(uint3 id : SV_DispatchThreadID)
+{
+    // 영향 범위 좌상단 셀에서 id 만큼 이동
+    int cellX = (int)(_CenterX - _Radius) + (int)id.x;
+    int cellZ = (int)(_CenterZ - _Radius) + (int)id.y;
+
+    // 지형 경계 체크
+    if (cellX < 0 || cellX > _Width || cellZ < 0 || cellZ > _Depth) return;
+
+    float dx   = (float)cellX - _CenterX;
+    float dz   = (float)cellZ - _CenterZ;
+    float dist = sqrt(dx * dx + dz * dz);
+
+    // 원형 브러시 바깥은 무시
+    if (dist > _Radius) return;
+
+    // 중심에 가까울수록 강하게, 가장자리로 갈수록 부드럽게 감소
+    float falloff = 1.0 - smoothstep(0.0, _Radius, dist);
+
+    int index = cellZ * (_Width + 1) + cellX;
+    _HeightMap[index] += _Direction * _Strength * falloff;
+}
