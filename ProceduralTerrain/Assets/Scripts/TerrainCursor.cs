@@ -140,6 +140,7 @@ public class TerrainCursor : MonoBehaviour
             strength,
             false
         );
+        deformer.Relax();
         dirtSystem.AddDirt(volume);
 
         IsAnimating = false;

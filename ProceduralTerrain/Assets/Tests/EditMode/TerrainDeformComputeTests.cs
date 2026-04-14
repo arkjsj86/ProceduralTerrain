@@ -211,4 +211,114 @@ public class TerrainDeformComputeTests
             Dispatch(initial, w, d, 1f, 1f, 1f, 3f, 3f, 0f, 1f, false);
         }, "경계 밖 셀 접근 시 예외 발생");
     }
+
+    // ── 이완(Relax) 헬퍼 ─────────────────────────────────────────────
+    private float[] DispatchRelax(
+        float[] initialHeights,
+        int width, int depth, float cellSize,
+        float reposeAngleDeg, float flowRate, int iterations)
+    {
+        int kernelIdx       = shader.FindKernel("CSRelax");
+        float maxHeightDiff = cellSize * Mathf.Tan(reposeAngleDeg * Mathf.Deg2Rad);
+        int groupsX         = Mathf.CeilToInt((width  + 1) / 8f);
+        int groupsZ         = Mathf.CeilToInt((depth  + 1) / 8f);
+
+        var bufA = new ComputeBuffer(initialHeights.Length, sizeof(float));
+        var bufB = new ComputeBuffer(initialHeights.Length, sizeof(float));
+        bufA.SetData(initialHeights);
+        bufB.SetData(initialHeights); // dst 초기화 (경계 셀 보호)
+
+        ComputeBuffer src = bufA, dst = bufB;
+
+        for (int i = 0; i < iterations; i++)
+        {
+            shader.SetBuffer(kernelIdx, "_HeightMapSrc",  src);
+            shader.SetBuffer(kernelIdx, "_HeightMapDst",  dst);
+            shader.SetInt   ("_Width",          width);
+            shader.SetInt   ("_Depth",          depth);
+            shader.SetFloat ("_MaxHeightDiff",  maxHeightDiff);
+            shader.SetFloat ("_FlowRate",       flowRate);
+            shader.Dispatch (kernelIdx, groupsX, groupsZ, 1);
+
+            ComputeBuffer tmp = src; src = dst; dst = tmp;
+        }
+
+        float[] result = new float[initialHeights.Length];
+        src.GetData(result);
+        bufA.Release();
+        bufB.Release();
+        return result;
+    }
+
+    // ================================================================
+    // 테스트 7: 뾰족한 봉우리가 이완되어야 함
+    // ================================================================
+    [Test]
+    public void Relax_SharpPeak_GetsSmoothed()
+    {
+        int w = 16, d = 16;
+        float[] heights = FlatMap(w, d, 5f);
+
+        // 중앙에 매우 높은 단일 봉우리 생성 (이웃보다 15 높음)
+        int peakX = 8, peakZ = 8;
+        heights[Idx(w, peakX, peakZ)] = 20f;
+
+        float reposeAngle = 35f;
+        float maxStable   = 1f * Mathf.Tan(reposeAngle * Mathf.Deg2Rad);
+
+        float[] result = DispatchRelax(heights, w, d, 1f, reposeAngle, 0.5f, 20);
+
+        // 봉우리가 낮아져야 함
+        Assert.Less(result[Idx(w, peakX, peakZ)], 20f,
+            "봉우리가 이완 후에도 그대로임");
+
+        // 봉우리와 이웃의 높이 차가 충분히 좁혀져야 함 (허용 오차 0.5 포함)
+        float peakH     = result[Idx(w, peakX,     peakZ)];
+        float neighborH = result[Idx(w, peakX + 1, peakZ)];
+        Assert.Less(peakH - neighborH, maxStable + 0.5f,
+            "이완 후에도 봉우리가 안식각 이상으로 가파름");
+    }
+
+    // ================================================================
+    // 테스트 8: 평탄 지형은 이완 후 변하지 않아야 함
+    // ================================================================
+    [Test]
+    public void Relax_FlatTerrain_RemainsUnchanged()
+    {
+        int w = 16, d = 16;
+        float baseHeight = 5f;
+        float[] heights  = FlatMap(w, d, baseHeight);
+
+        float[] result = DispatchRelax(heights, w, d, 1f, 35f, 0.5f, 10);
+
+        for (int z = 0; z <= d; z++)
+        for (int x = 0; x <= w; x++)
+            Assert.AreEqual(baseHeight, result[Idx(w, x, z)], HEIGHT_EPSILON,
+                $"평탄 지형의 셀 ({x},{z})이 변경됨");
+    }
+
+    // ================================================================
+    // 테스트 9: 이완 후 전체 높이 합(부피)이 보존되어야 함
+    // ================================================================
+    [Test]
+    public void Relax_TotalVolume_IsConserved()
+    {
+        int w = 16, d = 16;
+        float[] heights = FlatMap(w, d, 5f);
+
+        heights[Idx(w, 8,  8)] = 15f;
+        heights[Idx(w, 4,  4)] = 12f;
+        heights[Idx(w, 12, 3)] =  0f;
+
+        float sumBefore = 0f;
+        foreach (float h in heights) sumBefore += h;
+
+        float[] result = DispatchRelax(heights, w, d, 1f, 35f, 0.5f, 10);
+
+        float sumAfter = 0f;
+        foreach (float h in result) sumAfter += h;
+
+        Assert.AreEqual(sumBefore, sumAfter, 0.5f,
+            $"이완 전후 총 높이 합 불일치: before={sumBefore:F2}, after={sumAfter:F2}");
+    }
 }

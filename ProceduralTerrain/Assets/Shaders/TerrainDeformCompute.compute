@@ -1,4 +1,5 @@
 #pragma kernel CSDeform
+#pragma kernel CSRelax
 
 // 스레드 1개 = 셀 1개 (유일한 쓰기 대상)
 // → 경쟁 조건 없음 → float 직접 읽기/쓰기 가능
@@ -64,4 +65,60 @@ void CSDeform(uint3 id : SV_DispatchThreadID)
     // 파기(-1) / 올리기(+1) 모두 절댓값으로 볼륨 누산
     // 고정소수점: float → int (×10000), GPU 원자 연산
     InterlockedAdd(_VolumeAccum[0], (int)(abs(delta) * 10000.0));
+}
+
+// ───────────────────────────────────────────────────────────────
+// CSRelax: 안식각(Angle of Repose) 기반 경사 이완
+// 더블 버퍼 ping-pong 방식으로 데이터 경쟁 없이 실행
+// Dispatch(ceil((Width+1)/8), ceil((Depth+1)/8), 1) 로 호출
+// ───────────────────────────────────────────────────────────────
+
+// 더블 버퍼: src = 읽기 전용, dst = 쓰기 전용
+StructuredBuffer<float>   _HeightMapSrc;
+RWStructuredBuffer<float> _HeightMapDst;
+
+// 안식각 초과 판정 기준 높이 차 (= cellSize × tan(reposeAngle))
+float _MaxHeightDiff;
+
+// 한 pass당 이동 비율 (0~1, 보통 0.5)
+float _FlowRate;
+
+[numthreads(8, 8, 1)]
+void CSRelax(uint3 id : SV_DispatchThreadID)
+{
+    int cellX = (int)id.x;
+    int cellZ = (int)id.y;
+
+    if (cellX > _Width || cellZ > _Depth) return;
+
+    int   idx = cellZ * (_Width + 1) + cellX;
+    float myH = _HeightMapSrc[idx];
+    float net = 0.0;
+
+    // 4방향 이웃 (좌, 우, 앞, 뒤)
+    int nx0 = cellX - 1; int nz0 = cellZ;
+    int nx1 = cellX + 1; int nz1 = cellZ;
+    int nx2 = cellX;     int nz2 = cellZ - 1;
+    int nx3 = cellX;     int nz3 = cellZ + 1;
+
+    int nxArr[4]; nxArr[0] = nx0; nxArr[1] = nx1; nxArr[2] = nx2; nxArr[3] = nx3;
+    int nzArr[4]; nzArr[0] = nz0; nzArr[1] = nz1; nzArr[2] = nz2; nzArr[3] = nz3;
+
+    for (int i = 0; i < 4; i++)
+    {
+        int nx = nxArr[i];
+        int nz = nzArr[i];
+
+        if (nx < 0 || nx > _Width || nz < 0 || nz > _Depth) continue;
+
+        float nH   = _HeightMapSrc[nz * (_Width + 1) + nx];
+        float diff = myH - nH;
+
+        if (diff > _MaxHeightDiff)
+            net -= (diff - _MaxHeightDiff) * _FlowRate * 0.5;
+        else if (-diff > _MaxHeightDiff)
+            net += (-diff - _MaxHeightDiff) * _FlowRate * 0.5;
+    }
+
+    _HeightMapDst[idx] = myH + net;
 }

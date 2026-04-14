@@ -12,6 +12,19 @@ public class TerrainDeformer : MonoBehaviour
 
     private readonly int[] volumeRaw = new int[1];
 
+    [Header("Relaxation")]
+    [Range(5f, 60f)]
+    [SerializeField] private float reposeAngleDeg = 35f;
+
+    [Range(1, 30)]
+    [SerializeField] private int relaxIterations = 10;
+
+    [Range(0.1f, 0.9f)]
+    [SerializeField] private float flowRate = 0.5f;
+
+    private ComputeBuffer relaxBuffer;
+    private int relaxKernel;
+
     // Awake는 모든 Start() 이전에 실행되므로
     // TerrainGenerator.Start() → InitBuffer() 호출 시점에 generator가 준비됨
     private void Awake()
@@ -48,6 +61,10 @@ public class TerrainDeformer : MonoBehaviour
         volumeBuffer = new ComputeBuffer(1, sizeof(int));
 
         kernelIndex = deformShader.FindKernel("CSDeform");
+
+        relaxBuffer?.Release();
+        relaxBuffer = new ComputeBuffer(generator.HeightMap.Length, sizeof(float));
+        relaxKernel = deformShader.FindKernel("CSRelax");
     }
 
     /// <summary>
@@ -121,9 +138,50 @@ public class TerrainDeformer : MonoBehaviour
         return (volumeRaw[0] / 10000f) * cellArea;
     }
 
+    /// <summary>
+    /// 안식각 기반 경사 이완을 GPU에서 N회 실행합니다.
+    /// 굴삭(Deform) 직후 호출하면 뾰족한 지형이 자연스럽게 흘러내립니다.
+    /// </summary>
+    public void Relax()
+    {
+        if (heightBuffer == null || relaxBuffer == null) return;
+
+        float maxHeightDiff = generator.CellSize * Mathf.Tan(reposeAngleDeg * Mathf.Deg2Rad);
+        int groupsX = Mathf.CeilToInt((generator.Width  + 1) / 8f);
+        int groupsZ = Mathf.CeilToInt((generator.Depth  + 1) / 8f);
+
+        ComputeBuffer src = heightBuffer;
+        ComputeBuffer dst = relaxBuffer;
+
+        for (int i = 0; i < relaxIterations; i++)
+        {
+            deformShader.SetBuffer(relaxKernel, "_HeightMapSrc",  src);
+            deformShader.SetBuffer(relaxKernel, "_HeightMapDst",  dst);
+            deformShader.SetInt   ("_Width",          generator.Width);
+            deformShader.SetInt   ("_Depth",          generator.Depth);
+            deformShader.SetFloat ("_MaxHeightDiff",  maxHeightDiff);
+            deformShader.SetFloat ("_FlowRate",       flowRate);
+            deformShader.Dispatch (relaxKernel, groupsX, groupsZ, 1);
+
+            // ping-pong: src ↔ dst
+            ComputeBuffer tmp = src;
+            src = dst;
+            dst = tmp;
+        }
+
+        // 최종 결과는 src에 있음 (마지막 dispatch 후 swap된 쪽)
+        src.GetData(generator.HeightMap);
+        generator.ApplyHeightMap();
+
+        // 이후 Deform이 heightBuffer를 기준으로 동작하므로 동기화
+        if (src != heightBuffer)
+            heightBuffer.SetData(generator.HeightMap);
+    }
+
     private void OnDestroy()
     {
         heightBuffer?.Release();
         volumeBuffer?.Release();
+        relaxBuffer?.Release();
     }
 }
