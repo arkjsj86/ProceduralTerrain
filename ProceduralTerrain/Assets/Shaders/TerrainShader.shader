@@ -27,8 +27,9 @@ Shader "Custom/TerrainShader"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _SHADOWS_SOFT
+            #pragma multi_compile _ REQUIRES_VERTEX_SHADOW_COORD_INTERPOLATOR
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -55,10 +56,11 @@ Shader "Custom/TerrainShader"
 
             struct Varyings
             {
-                float4 positionCS : SV_POSITION;
-                float3 positionWS : TEXCOORD0;
-                float3 normalWS   : TEXCOORD1;
-                float4 color      : COLOR;
+                float4 positionCS  : SV_POSITION;
+                float3 positionWS  : TEXCOORD0;
+                float3 normalWS    : TEXCOORD1;
+                float4 color       : COLOR;
+                float4 shadowCoord : TEXCOORD2;
             };
 
             Varyings vert(Attributes IN)
@@ -66,10 +68,11 @@ Shader "Custom/TerrainShader"
                 Varyings OUT;
                 VertexPositionInputs posInputs  = GetVertexPositionInputs(IN.positionOS.xyz);
                 VertexNormalInputs   normInputs = GetVertexNormalInputs(IN.normalOS);
-                OUT.positionCS = posInputs.positionCS;
-                OUT.positionWS = posInputs.positionWS;
-                OUT.normalWS   = normInputs.normalWS;
-                OUT.color      = IN.color;
+                OUT.positionCS  = posInputs.positionCS;
+                OUT.positionWS  = posInputs.positionWS;
+                OUT.normalWS    = normInputs.normalWS;
+                OUT.color       = IN.color;
+                OUT.shadowCoord = GetShadowCoord(posInputs);
                 return OUT;
             }
 
@@ -97,10 +100,10 @@ Shader "Custom/TerrainShader"
                 float concavity = IN.color.r;
                 col.rgb *= lerp(1.0, 1.0 - _ValleyDarkness, concavity);
 
-                // Diffuse 조명 (ambient 0.2 포함)
-                Light mainLight = GetMainLight();
+                // Diffuse 조명 (ambient 0.2 포함, 그림자 수신 포함)
+                Light mainLight = GetMainLight(IN.shadowCoord);
                 float ndotl     = saturate(dot(normalWS, mainLight.direction));
-                col.rgb        *= mainLight.color * (ndotl * 0.8 + 0.2);
+                col.rgb        *= mainLight.color * (ndotl * 0.8 + 0.2) * mainLight.shadowAttenuation;
 
                 return col;
             }
