@@ -184,6 +184,9 @@ public class TerrainGenerator : MonoBehaviour
         int vertexCount = (width + 1) * (depth + 1);
         Color[] colors = new Color[vertexCount];
 
+        // 1패스: 원시 오목도 계산
+        float[] raw = new float[vertexCount];
+        float maxRaw = 0f;
         for (int z = 0; z <= depth; z++)
         {
             for (int x = 0; x <= width; x++)
@@ -199,10 +202,15 @@ public class TerrainGenerator : MonoBehaviour
                 if (z < depth) { neighborSum += heightMap[i + (width + 1)]; count++; }
 
                 float avg = count > 0 ? neighborSum / count : self;
-                float concavity = Mathf.Clamp01((avg - self) * 0.5f);
-                colors[i] = new Color(concavity, 0f, 0f, 1f);
+                raw[i] = Mathf.Max(0f, avg - self); // 오목한 쪽만
+                if (raw[i] > maxRaw) maxRaw = raw[i];
             }
         }
+
+        // 2패스: 최댓값으로 정규화 (가장 깊은 계곡 = 1.0)
+        float scale = maxRaw > 0.001f ? 1f / maxRaw : 0f;
+        for (int i = 0; i < vertexCount; i++)
+            colors[i] = new Color(raw[i] * scale, 0f, 0f, 1f);
 
         return colors;
     }
