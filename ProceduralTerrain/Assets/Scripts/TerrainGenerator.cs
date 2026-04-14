@@ -152,6 +152,7 @@ public class TerrainGenerator : MonoBehaviour
         mesh.uv = uvs;
         mesh.triangles = triangles;
         mesh.RecalculateNormals();
+        mesh.colors = ComputeConcavityColors(HeightMap, width, depth);
         mesh.RecalculateBounds();
 
         GetComponent<MeshCollider>().sharedMesh = mesh;
@@ -168,6 +169,7 @@ public class TerrainGenerator : MonoBehaviour
 
         mesh.vertices = vertices;
         mesh.RecalculateNormals();
+        mesh.colors = ComputeConcavityColors(HeightMap, width, depth);
         mesh.RecalculateBounds();
 
         GetComponent<MeshCollider>().sharedMesh = mesh;
