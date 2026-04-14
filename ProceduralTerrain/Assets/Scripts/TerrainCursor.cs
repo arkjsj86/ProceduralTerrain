@@ -6,7 +6,7 @@ public class TerrainCursor : MonoBehaviour
     [SerializeField] private Camera mainCamera;
     [SerializeField] private TerrainDeformer deformer;
 
-    // 큐브 크기 (XZ = 브러시 영역, Y = 시각적 높이)
+    // 큐브 크기 (XZ = 버킷 굴삭 영역, Y = 시각적 높이)
     [SerializeField] private Vector3 cursorScale = new Vector3(4f, 2f, 4f);
 
     [Range(0.01f, 3f)]
@@ -16,10 +16,6 @@ public class TerrainCursor : MonoBehaviour
     // 하강 깊이 (cursorScale.y 대비 배율)
     [Range(0.5f, 3f)]
     [SerializeField] private float digDepthMultiplier = 1.5f;
-
-    // 한 번 팔 때 쌓이는 흙의 양
-    [Range(0.1f, 10f)]
-    [SerializeField] private float dirtPerDig = 2f;
 
     private GameObject cursorCube;
     private DirtSystem dirtSystem;
@@ -134,9 +130,18 @@ public class TerrainCursor : MonoBehaviour
         // 4단계: 수평 상태로 상승 (--- 원위치)
         yield return MoveCoroutine(cursorCube.transform, downPos, startPos, 0.2f);
 
-        // 완료: 지형 파기 + 흙 누적
-        deformer.Deform(lastHitPoint, BrushRadius, strength, false);
-        dirtSystem.AddDirt(dirtPerDig);
+        // 완료: 버킷 XZ 크기 + Y 회전 → 직사각형 지형 파기
+        // 반환된 볼륨(GPU 계산)을 흙 적재량으로 사용
+        float volume = deformer.Deform(
+            lastHitPoint,
+            cursorScale.x * 0.5f,
+            cursorScale.z * 0.5f,
+            cursorCube.transform.eulerAngles.y,
+            strength,
+            false
+        );
+        deformer.Relax();
+        dirtSystem.AddDirt(volume);
 
         IsAnimating = false;
     }
@@ -144,8 +149,16 @@ public class TerrainCursor : MonoBehaviour
     // ── 덤프 코루틴: Y축 360° 회전 → 흙 전량 방출 → 지형 복구 ──────
     private System.Collections.IEnumerator DumpCoroutine()
     {
+        // 흙이 없으면 애니메이션 자체를 스킵
+        if (dirtSystem.AccumulatedDirt <= 0f)
+        {
+            yield break;
+        }
+
         IsAnimating = true;
 
+        // DumpAll() 호출 전에 미리 캡처 (호출 후에는 0이 됨)
+        float dirtToDump    = dirtSystem.AccumulatedDirt;
         Quaternion startRot = cursorCube.transform.rotation;
         float duration      = 1f;
         float elapsed       = 0f;
@@ -173,9 +186,20 @@ public class TerrainCursor : MonoBehaviour
         // 회전 원점 복귀
         cursorCube.transform.rotation = startRot;
 
-        // 지형 복구 (파낸 만큼 한 번 올리기)
+        // 지형 복구: 버킷에 쌓인 비율만큼만 올리기
+        // 절반만 찼으면 절반만 복구 (strength × dirtToDump / OverflowThreshold)
         if (deformer != null)
-            deformer.Deform(lastHitPoint, BrushRadius, strength, true);
+        {
+            float scaledStrength = strength * (dirtToDump / dirtSystem.OverflowThreshold);
+            deformer.Deform(
+                lastHitPoint,
+                cursorScale.x * 0.5f,
+                cursorScale.z * 0.5f,
+                cursorCube.transform.eulerAngles.y,
+                scaledStrength,
+                true
+            );
+        }
 
         IsAnimating = false;
     }
@@ -207,8 +231,6 @@ public class TerrainCursor : MonoBehaviour
         }
         t.rotation = to;
     }
-
-    private float BrushRadius => Mathf.Max(cursorScale.x, cursorScale.z) * 0.5f;
 
     public Vector3 CursorScale => cursorScale;
 
