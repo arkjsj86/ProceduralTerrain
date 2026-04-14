@@ -2,7 +2,8 @@
     "name": "TerrainShaderTests",
     "references": [
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "ProceduralTerrain"
     ],
     "includePlatforms": [
         "Editor"
