@@ -172,4 +172,36 @@ public class TerrainGenerator : MonoBehaviour
 
         GetComponent<MeshCollider>().sharedMesh = mesh;
     }
+
+    /// <summary>
+    /// 각 정점의 오목도를 계산한다. 이웃 높이 평균 - 자신 높이가 클수록 계곡.
+    /// 반환값 Color.r = 0(볼록/평탄) ~ 1(깊은 계곡)
+    /// </summary>
+    public static Color[] ComputeConcavityColors(float[] heightMap, int width, int depth)
+    {
+        int vertexCount = (width + 1) * (depth + 1);
+        Color[] colors = new Color[vertexCount];
+
+        for (int z = 0; z <= depth; z++)
+        {
+            for (int x = 0; x <= width; x++)
+            {
+                int i = z * (width + 1) + x;
+                float self = heightMap[i];
+                float neighborSum = 0f;
+                int count = 0;
+
+                if (x > 0)     { neighborSum += heightMap[i - 1];           count++; }
+                if (x < width) { neighborSum += heightMap[i + 1];           count++; }
+                if (z > 0)     { neighborSum += heightMap[i - (width + 1)]; count++; }
+                if (z < depth) { neighborSum += heightMap[i + (width + 1)]; count++; }
+
+                float avg = count > 0 ? neighborSum / count : self;
+                float concavity = Mathf.Clamp01((avg - self) * 0.5f);
+                colors[i] = new Color(concavity, 0f, 0f, 1f);
+            }
+        }
+
+        return colors;
+    }
 }
