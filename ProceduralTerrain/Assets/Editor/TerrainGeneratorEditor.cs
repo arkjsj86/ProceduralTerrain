@@ -6,6 +6,7 @@ public static class TerrainGeneratorEditor
     [MenuItem("Tools/ProceduralTerrain/Create Terrain")]
     private static void CreateTerrain()
     {
+        // ── 1. 지형 오브젝트 ──────────────────────────────────────────
         GameObject go = new GameObject("ProceduralTerrain");
 
         go.AddComponent<MeshFilter>();
@@ -13,9 +14,51 @@ public static class TerrainGeneratorEditor
         MeshRenderer renderer = go.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = GetOrCreateDefaultMaterial();
 
-        go.AddComponent<TerrainGenerator>();
+        TerrainGenerator generator = go.AddComponent<TerrainGenerator>();
+
+        // TerrainGenerator erosion Compute Shader 자동 할당
+        ComputeShader erosionShader = AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            "Assets/Shaders/HydraulicErosionCompute.compute");
+        if (erosionShader != null)
+        {
+            SerializedObject genSo = new SerializedObject(generator);
+            genSo.FindProperty("erosionComputeShader").objectReferenceValue = erosionShader;
+            genSo.ApplyModifiedProperties();
+        }
+        else
+        {
+            Debug.LogWarning("[ProceduralTerrain] HydraulicErosionCompute.compute를 찾을 수 없습니다. erosionComputeShader를 직접 할당해 주세요.");
+        }
+
+        // TerrainDeformer + Compute Shader 자동 할당
+        TerrainDeformer deformer = go.AddComponent<TerrainDeformer>();
+        ComputeShader deformShader = AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            "Assets/Shaders/TerrainDeformCompute.compute");
+        if (deformShader != null)
+        {
+            SerializedObject deformerSo = new SerializedObject(deformer);
+            deformerSo.FindProperty("deformShader").objectReferenceValue = deformShader;
+            deformerSo.ApplyModifiedProperties();
+        }
+        else
+        {
+            Debug.LogWarning("[ProceduralTerrain] TerrainDeformCompute.compute를 찾을 수 없습니다. deformShader를 직접 할당해 주세요.");
+        }
 
         Undo.RegisterCreatedObjectUndo(go, "Create ProceduralTerrain");
+
+        // ── 2. TerrainCursor 오브젝트 (씬에 없을 때만 생성) ──────────
+        if (Object.FindFirstObjectByType<TerrainCursor>() == null)
+        {
+            GameObject cursorGo = new GameObject("TerrainCursor");
+            TerrainCursor cursor = cursorGo.AddComponent<TerrainCursor>();
+
+            SerializedObject cursorSo = new SerializedObject(cursor);
+            cursorSo.FindProperty("deformer").objectReferenceValue = deformer;
+            cursorSo.ApplyModifiedProperties();
+
+            Undo.RegisterCreatedObjectUndo(cursorGo, "Create TerrainCursor");
+        }
 
         Selection.activeGameObject = go;
         SceneView.FrameLastActiveSceneView();
@@ -70,5 +113,29 @@ public class TerrainGeneratorInspector : Editor
             EditorUtility.SetDirty(generator);
             SceneView.RepaintAll();
         }
+
+        TerrainGenerator gen = (TerrainGenerator)target;
+        MeshFilter mf = gen.GetComponent<MeshFilter>();
+        bool hasMesh = mf != null && mf.sharedMesh != null;
+
+        GUI.enabled = hasMesh;
+        if (GUILayout.Button("Save Mesh", GUILayout.Height(30)))
+        {
+            string path = EditorUtility.SaveFilePanelInProject(
+                "Save Terrain Mesh",
+                "TerrainMesh",
+                "asset",
+                "메시를 저장할 위치를 선택하세요.");
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                Mesh meshToSave = Instantiate(mf.sharedMesh);
+                AssetDatabase.CreateAsset(meshToSave, path);
+                AssetDatabase.SaveAssets();
+                Selection.activeObject = meshToSave;
+                EditorGUIUtility.PingObject(meshToSave);
+            }
+        }
+        GUI.enabled = true;
     }
 }

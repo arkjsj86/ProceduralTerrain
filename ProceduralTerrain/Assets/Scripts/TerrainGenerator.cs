@@ -17,7 +17,6 @@ public class TerrainGenerator : MonoBehaviour
     [SerializeField] public bool applyErosion = true;
     [SerializeField] public ErosionSettings erosionSettings = new ErosionSettings();
 
-    [SerializeField] private bool useGPUErosion = true;
     [SerializeField] private ComputeShader erosionComputeShader;
 
     // 침식 알고리즘(2단계)과 Compute Shader(3단계)에서 직접 접근
@@ -48,22 +47,14 @@ public class TerrainGenerator : MonoBehaviour
 
     private void RunErosion()
     {
-        if (useGPUErosion)
+        if (erosionComputeShader == null)
         {
-            if (erosionComputeShader == null)
-            {
-                Debug.LogWarning("[TerrainGenerator] Erosion Compute Shader가 할당되지 않았습니다. CPU로 폴백합니다.");
-                HydraulicErosion.Erode(HeightMap, width, depth, erosionSettings);
-                return;
-            }
+            Debug.LogWarning("[TerrainGenerator] Erosion Compute Shader가 할당되지 않았습니다.");
+            return;
+        }
 
-            new ComputeErosion(erosionComputeShader)
-                .Erode(HeightMap, width, depth, erosionSettings);
-        }
-        else
-        {
-            HydraulicErosion.Erode(HeightMap, width, depth, erosionSettings);
-        }
+        new ComputeErosion(erosionComputeShader)
+            .Erode(HeightMap, width, depth, erosionSettings);
     }
 
     private void GenerateHeightMap()
@@ -152,6 +143,7 @@ public class TerrainGenerator : MonoBehaviour
         mesh.uv = uvs;
         mesh.triangles = triangles;
         mesh.RecalculateNormals();
+        mesh.colors = ComputeConcavityColors(HeightMap, width, depth);
         mesh.RecalculateBounds();
 
         GetComponent<MeshCollider>().sharedMesh = mesh;
@@ -168,8 +160,49 @@ public class TerrainGenerator : MonoBehaviour
 
         mesh.vertices = vertices;
         mesh.RecalculateNormals();
+        mesh.colors = ComputeConcavityColors(HeightMap, width, depth);
         mesh.RecalculateBounds();
 
         GetComponent<MeshCollider>().sharedMesh = mesh;
+    }
+
+    /// <summary>
+    /// 각 정점의 오목도를 계산한다. 이웃 높이 평균 - 자신 높이가 클수록 계곡.
+    /// 반환값 Color.r = 0(볼록/평탄) ~ 1(깊은 계곡)
+    /// </summary>
+    public static Color[] ComputeConcavityColors(float[] heightMap, int width, int depth)
+    {
+        int vertexCount = (width + 1) * (depth + 1);
+        Color[] colors = new Color[vertexCount];
+
+        // 1패스: 원시 오목도 계산
+        float[] raw = new float[vertexCount];
+        float maxRaw = 0f;
+        for (int z = 0; z <= depth; z++)
+        {
+            for (int x = 0; x <= width; x++)
+            {
+                int i = z * (width + 1) + x;
+                float self = heightMap[i];
+                float neighborSum = 0f;
+                int count = 0;
+
+                if (x > 0)     { neighborSum += heightMap[i - 1];           count++; }
+                if (x < width) { neighborSum += heightMap[i + 1];           count++; }
+                if (z > 0)     { neighborSum += heightMap[i - (width + 1)]; count++; }
+                if (z < depth) { neighborSum += heightMap[i + (width + 1)]; count++; }
+
+                float avg = count > 0 ? neighborSum / count : self;
+                raw[i] = Mathf.Max(0f, avg - self); // 오목한 쪽만
+                if (raw[i] > maxRaw) maxRaw = raw[i];
+            }
+        }
+
+        // 2패스: 최댓값으로 정규화 (가장 깊은 계곡 = 1.0)
+        float scale = maxRaw > 0.001f ? 1f / maxRaw : 0f;
+        for (int i = 0; i < vertexCount; i++)
+            colors[i] = new Color(raw[i] * scale, 0f, 0f, 1f);
+
+        return colors;
     }
 }
