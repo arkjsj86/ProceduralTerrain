@@ -251,7 +251,41 @@ public class TerrainDeformComputeTests
     }
 
     // ================================================================
-    // 테스트 7: 뾰족한 봉우리가 이완되어야 함
+    // 테스트 7: strength=0 raise → 지형 변화 없음 (흙 없을 때 스킵 로직 보호)
+    // ================================================================
+    [Test]
+    public void Raise_ZeroStrength_NoTerrainChange()
+    {
+        int w = 16, d = 16;
+        float[] heights = FlatMap(w, d, 5f);
+
+        var (result, volume) = Dispatch(heights, w, d, 1f, 8f, 8f, 2f, 2f, 0f, 0f, raise: true);
+
+        Assert.AreEqual(0f, volume, HEIGHT_EPSILON, "strength=0 raise가 볼륨을 반환함");
+        for (int z = 0; z <= d; z++)
+        for (int x = 0; x <= w; x++)
+            Assert.AreEqual(5f, result[Idx(w, x, z)], HEIGHT_EPSILON,
+                $"strength=0 raise인데 셀 ({x},{z}) 높이가 변경됨");
+    }
+
+    // ================================================================
+    // 테스트 8: 절반 strength raise → 전체 strength raise 볼륨의 절반
+    // ================================================================
+    [Test]
+    public void Raise_HalfStrength_ProducesHalfVolume()
+    {
+        int w = 16, d = 16;
+        float he = 2f;
+
+        var (_, fullVolume) = Dispatch(FlatMap(w, d), w, d, 1f, 8f, 8f, he, he, 0f, 1.0f, raise: true);
+        var (_, halfVolume) = Dispatch(FlatMap(w, d), w, d, 1f, 8f, 8f, he, he, 0f, 0.5f, raise: true);
+
+        Assert.AreEqual(fullVolume * 0.5f, halfVolume, VOLUME_EPSILON,
+            $"절반 strength가 절반 볼륨을 생성하지 않음: full={fullVolume:F3}, half={halfVolume:F3}");
+    }
+
+    // ================================================================
+    // 테스트 10: 뾰족한 봉우리가 이완되어야 함
     // ================================================================
     [Test]
     public void Relax_SharpPeak_GetsSmoothed()
@@ -280,7 +314,7 @@ public class TerrainDeformComputeTests
     }
 
     // ================================================================
-    // 테스트 8: 평탄 지형은 이완 후 변하지 않아야 함
+    // 테스트 11: 평탄 지형은 이완 후 변하지 않아야 함
     // ================================================================
     [Test]
     public void Relax_FlatTerrain_RemainsUnchanged()
@@ -298,7 +332,7 @@ public class TerrainDeformComputeTests
     }
 
     // ================================================================
-    // 테스트 9: 이완 후 전체 높이 합(부피)이 보존되어야 함
+    // 테스트 12: 이완 후 전체 높이 합(부피)이 보존되어야 함
     // ================================================================
     [Test]
     public void Relax_TotalVolume_IsConserved()

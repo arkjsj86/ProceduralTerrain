@@ -149,8 +149,16 @@ public class TerrainCursor : MonoBehaviour
     // ── 덤프 코루틴: Y축 360° 회전 → 흙 전량 방출 → 지형 복구 ──────
     private System.Collections.IEnumerator DumpCoroutine()
     {
+        // 흙이 없으면 애니메이션 자체를 스킵
+        if (dirtSystem.AccumulatedDirt <= 0f)
+        {
+            yield break;
+        }
+
         IsAnimating = true;
 
+        // DumpAll() 호출 전에 미리 캡처 (호출 후에는 0이 됨)
+        float dirtToDump    = dirtSystem.AccumulatedDirt;
         Quaternion startRot = cursorCube.transform.rotation;
         float duration      = 1f;
         float elapsed       = 0f;
@@ -178,15 +186,17 @@ public class TerrainCursor : MonoBehaviour
         // 회전 원점 복귀
         cursorCube.transform.rotation = startRot;
 
-        // 지형 복구 (파낸 만큼 한 번 올리기) — 반환 볼륨 미사용
+        // 지형 복구: 버킷에 쌓인 비율만큼만 올리기
+        // 절반만 찼으면 절반만 복구 (strength × dirtToDump / OverflowThreshold)
         if (deformer != null)
         {
+            float scaledStrength = strength * (dirtToDump / dirtSystem.OverflowThreshold);
             deformer.Deform(
                 lastHitPoint,
                 cursorScale.x * 0.5f,
                 cursorScale.z * 0.5f,
                 cursorCube.transform.eulerAngles.y,
-                strength,
+                scaledStrength,
                 true
             );
         }
