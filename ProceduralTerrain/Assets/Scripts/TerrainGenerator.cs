@@ -17,7 +17,6 @@ public class TerrainGenerator : MonoBehaviour
     [SerializeField] public bool applyErosion = true;
     [SerializeField] public ErosionSettings erosionSettings = new ErosionSettings();
 
-    [SerializeField] private bool useGPUErosion = true;
     [SerializeField] private ComputeShader erosionComputeShader;
 
     // 침식 알고리즘(2단계)과 Compute Shader(3단계)에서 직접 접근
@@ -48,22 +47,14 @@ public class TerrainGenerator : MonoBehaviour
 
     private void RunErosion()
     {
-        if (useGPUErosion)
+        if (erosionComputeShader == null)
         {
-            if (erosionComputeShader == null)
-            {
-                Debug.LogWarning("[TerrainGenerator] Erosion Compute Shader가 할당되지 않았습니다. CPU로 폴백합니다.");
-                HydraulicErosion.Erode(HeightMap, width, depth, erosionSettings);
-                return;
-            }
+            Debug.LogWarning("[TerrainGenerator] Erosion Compute Shader가 할당되지 않았습니다.");
+            return;
+        }
 
-            new ComputeErosion(erosionComputeShader)
-                .Erode(HeightMap, width, depth, erosionSettings);
-        }
-        else
-        {
-            HydraulicErosion.Erode(HeightMap, width, depth, erosionSettings);
-        }
+        new ComputeErosion(erosionComputeShader)
+            .Erode(HeightMap, width, depth, erosionSettings);
     }
 
     private void GenerateHeightMap()

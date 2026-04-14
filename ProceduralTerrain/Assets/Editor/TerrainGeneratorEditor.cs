@@ -14,7 +14,21 @@ public static class TerrainGeneratorEditor
         MeshRenderer renderer = go.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = GetOrCreateDefaultMaterial();
 
-        go.AddComponent<TerrainGenerator>();
+        TerrainGenerator generator = go.AddComponent<TerrainGenerator>();
+
+        // TerrainGenerator erosion Compute Shader 자동 할당
+        ComputeShader erosionShader = AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            "Assets/Shaders/HydraulicErosionCompute.compute");
+        if (erosionShader != null)
+        {
+            SerializedObject genSo = new SerializedObject(generator);
+            genSo.FindProperty("erosionComputeShader").objectReferenceValue = erosionShader;
+            genSo.ApplyModifiedProperties();
+        }
+        else
+        {
+            Debug.LogWarning("[ProceduralTerrain] HydraulicErosionCompute.compute를 찾을 수 없습니다. erosionComputeShader를 직접 할당해 주세요.");
+        }
 
         // TerrainDeformer + Compute Shader 자동 할당
         TerrainDeformer deformer = go.AddComponent<TerrainDeformer>();
