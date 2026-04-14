@@ -70,5 +70,29 @@ public class TerrainGeneratorInspector : Editor
             EditorUtility.SetDirty(generator);
             SceneView.RepaintAll();
         }
+
+        TerrainGenerator gen = (TerrainGenerator)target;
+        MeshFilter mf = gen.GetComponent<MeshFilter>();
+        bool hasMesh = mf != null && mf.sharedMesh != null;
+
+        GUI.enabled = hasMesh;
+        if (GUILayout.Button("Save Mesh", GUILayout.Height(30)))
+        {
+            string path = EditorUtility.SaveFilePanelInProject(
+                "Save Terrain Mesh",
+                "TerrainMesh",
+                "asset",
+                "메시를 저장할 위치를 선택하세요.");
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                Mesh meshToSave = Instantiate(mf.sharedMesh);
+                AssetDatabase.CreateAsset(meshToSave, path);
+                AssetDatabase.SaveAssets();
+                Selection.activeObject = meshToSave;
+                EditorGUIUtility.PingObject(meshToSave);
+            }
+        }
+        GUI.enabled = true;
     }
 }
