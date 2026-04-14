@@ -6,6 +6,7 @@ public static class TerrainGeneratorEditor
     [MenuItem("Tools/ProceduralTerrain/Create Terrain")]
     private static void CreateTerrain()
     {
+        // ── 1. 지형 오브젝트 ──────────────────────────────────────────
         GameObject go = new GameObject("ProceduralTerrain");
 
         go.AddComponent<MeshFilter>();
@@ -15,7 +16,35 @@ public static class TerrainGeneratorEditor
 
         go.AddComponent<TerrainGenerator>();
 
+        // TerrainDeformer + Compute Shader 자동 할당
+        TerrainDeformer deformer = go.AddComponent<TerrainDeformer>();
+        ComputeShader deformShader = AssetDatabase.LoadAssetAtPath<ComputeShader>(
+            "Assets/Shaders/TerrainDeformCompute.compute");
+        if (deformShader != null)
+        {
+            SerializedObject deformerSo = new SerializedObject(deformer);
+            deformerSo.FindProperty("deformShader").objectReferenceValue = deformShader;
+            deformerSo.ApplyModifiedProperties();
+        }
+        else
+        {
+            Debug.LogWarning("[ProceduralTerrain] TerrainDeformCompute.compute를 찾을 수 없습니다. deformShader를 직접 할당해 주세요.");
+        }
+
         Undo.RegisterCreatedObjectUndo(go, "Create ProceduralTerrain");
+
+        // ── 2. TerrainCursor 오브젝트 (씬에 없을 때만 생성) ──────────
+        if (Object.FindFirstObjectByType<TerrainCursor>() == null)
+        {
+            GameObject cursorGo = new GameObject("TerrainCursor");
+            TerrainCursor cursor = cursorGo.AddComponent<TerrainCursor>();
+
+            SerializedObject cursorSo = new SerializedObject(cursor);
+            cursorSo.FindProperty("deformer").objectReferenceValue = deformer;
+            cursorSo.ApplyModifiedProperties();
+
+            Undo.RegisterCreatedObjectUndo(cursorGo, "Create TerrainCursor");
+        }
 
         Selection.activeGameObject = go;
         SceneView.FrameLastActiveSceneView();
