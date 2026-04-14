@@ -54,6 +54,7 @@ Unity URP 기반 절차적 지형 생성 프로젝트.
 - CPU 침식 로직을 Compute Shader로 이식 (`HydraulicErosionCompute.compute`)
 - `ComputeBuffer`로 높이맵 데이터를 GPU에 전송/수신
 - 50,000개 물방울 병렬 처리
+- **GPU 전용** — `Create Terrain` 메뉴 실행 시 Compute Shader 자동 할당
 
 ---
 
@@ -72,7 +73,7 @@ Unity URP 기반 절차적 지형 생성 프로젝트.
 | Blend Width | 레이어 전환 부드러움 |
 | Valley Darkness | 계곡 어둠 강도 |
 
-**오목도(Concavity) 계산:** 메시 생성 시 4방향 이웃 평균과 자신의 높이 차이를 정규화하여 정점 색에 저장. 지형 스케일에 무관하게 자연스러운 계곡 강조.
+**오목도(Concavity) 계산:** 메시 생성 시 4방향 이웃 평균과 자신의 높이 차이를 2패스로 정규화하여 정점 색에 저장. 가장 깊은 계곡 = 1.0, 볼록/평탄 = 0.0으로 지형 스케일과 무관하게 자연스러운 계곡 강조.
 
 ---
 
@@ -89,8 +90,11 @@ Unity URP 기반 절차적 지형 생성 프로젝트.
 ### 5단계: Custom Editor 도구화
 
 - **Tools > ProceduralTerrain > Create Terrain** — 씬에 지형 오브젝트 자동 생성
+  - `TerrainGenerator`, `TerrainDeformer`, `MeshFilter`, `MeshRenderer` 컴포넌트 자동 추가
+  - `HydraulicErosionCompute.compute` / `TerrainDeformCompute.compute` 자동 할당
+  - `TerrainCursor` 오브젝트가 씬에 없으면 자동 생성 및 Deformer 연결
 - **Inspector Preview 버튼** — 에디터에서 즉시 지형 재생성
-- **Inspector Save Mesh 버튼** — 생성된 메시를 `.asset` 파일로 저장 (다른 프로젝트 이식용)
+- **Inspector Save Mesh 버튼** — 생성된 메시를 `.asset` 파일로 저장 (다른 프로젝트 이식용), 메시 없을 때 비활성화
 
 ---
 
@@ -112,9 +116,9 @@ Assets/
     HydraulicErosionCompute.compute   # GPU 침식 커널
     TerrainDeformCompute.compute      # GPU 굴삭 커널
   Editor/
-    TerrainGeneratorEditor.cs  # Custom Editor (Preview / Save Mesh 버튼)
-  Material/
-    Terrain_Empty.mat          # TerrainShader 적용 머티리얼
+    TerrainGeneratorEditor.cs  # Custom Editor (Create Terrain / Preview / Save Mesh)
+  Materials/
+    TerrainDefault.mat         # Create Terrain 시 자동 생성되는 기본 머티리얼
   Tests/
     EditMode/
       TerrainDeformComputeTests.cs   # GPU 굴삭 Edit Mode 테스트
@@ -128,6 +132,7 @@ Assets/
 
 1. Unity 6000.3.5f2 이상으로 프로젝트 열기
 2. **Tools > ProceduralTerrain > Create Terrain** 으로 지형 오브젝트 생성
+   - Compute Shader 및 TerrainCursor 자동 설정됨
 3. Inspector에서 파라미터 조절 후 **Preview** 버튼으로 재생성
 4. 결과물은 **Save Mesh** 버튼으로 `.asset` 저장 가능
 
